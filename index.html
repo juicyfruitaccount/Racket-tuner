@@ -1,0 +1,496 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Racket Tuner">
+<meta name="theme-color" content="#edf0ef" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#101517" media="(prefers-color-scheme: dark)">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Racket Tuner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: Werkbank – links Eingaben, Mitte Racket-Zeichnung im Massstab, rechts Ergebnis. Mobil gestapelt. */
+:root{
+  --bg:#edf0ef; --surface:#ffffff; --sunk:#f5f7f6; --ink:#162019; --muted:#5a6661; --line:#d2d9d6;
+  --accent:#1c5cab; --accent-ink:#ffffff; --tape:#d58a1f; --frame:#232a2c; --string:#c4ccc8; --grip:#3a4447;
+  --ok:#2c7a4b; --warn:#a86d12; --bad:#b03a3a;
+  --f-display:"Barlow Condensed","Arial Narrow",Arial,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101517; --surface:#182023; --sunk:#141a1d; --ink:#e4eae7; --muted:#93a09a; --line:#2b3539;
+  --accent:#6aa2ee; --accent-ink:#0d1520; --tape:#f0ad45; --frame:#cfd7d4; --string:#3b4649; --grip:#8b979a;
+  --ok:#5fbf86; --warn:#e3a646; --bad:#ec7b7b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101517; --surface:#182023; --sunk:#141a1d; --ink:#e4eae7; --muted:#93a09a; --line:#2b3539;
+  --accent:#6aa2ee; --accent-ink:#0d1520; --tape:#f0ad45; --frame:#cfd7d4; --string:#3b4649; --grip:#8b979a;
+  --ok:#5fbf86; --warn:#e3a646; --bad:#ec7b7b; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.5}
+.wrap{max-width:1320px;margin:0 auto;padding-inline:16px;padding-block:20px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 16px;margin-bottom:18px}
+h1{font-family:var(--f-display);font-weight:700;font-size:2.4rem;letter-spacing:.01em;line-height:1;margin:0;text-transform:uppercase}
+h1 span{color:var(--tape)}
+.sub{color:var(--muted);margin:0;max-width:60ch}
+h2{font-family:var(--f-display);font-weight:600;font-size:1.15rem;letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px;color:var(--ink)}
+.grid{display:grid;grid-template-columns:minmax(260px,330px) minmax(0,1fr) minmax(300px,400px);gap:18px;align-items:start}
+@media (max-width:1100px){.grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.col-draw{grid-column:1 / -1;order:3}}
+@media (max-width:700px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.stack{display:flex;flex-direction:column;gap:18px;min-width:0}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label,.lbl{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.inp{display:flex;align-items:center;border:1px solid var(--line);border-radius:6px;background:var(--sunk);overflow:hidden}
+.inp:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 25%,transparent)}
+.inp input,.inp select{flex:1;min-width:0;border:0;background:transparent;color:var(--ink);font-family:var(--f-mono);font-size:.95rem;padding:7px 8px;outline:none;font-variant-numeric:tabular-nums}
+.inp .u{font-family:var(--f-mono);font-size:.75rem;color:var(--muted);padding-right:8px;white-space:nowrap}
+select.plain{width:100%;border:1px solid var(--line);border-radius:6px;background:var(--sunk);color:var(--ink);font-family:var(--f-body);font-size:.9rem;padding:7px 8px}
+.hint{font-size:.78rem;color:var(--muted);margin:8px 0 0}
+details.geo{margin-top:12px;border-top:1px dashed var(--line);padding-top:10px}
+details.geo summary{cursor:pointer;font-size:.8rem;font-weight:600;color:var(--accent)}
+details.geo .fields{margin-top:10px}
+.tabs{display:flex;gap:4px;background:var(--sunk);border:1px solid var(--line);border-radius:8px;padding:3px;margin-bottom:14px}
+.tabs button{flex:1;border:0;background:transparent;color:var(--muted);font-family:var(--f-display);font-weight:600;font-size:1rem;letter-spacing:.06em;text-transform:uppercase;padding:7px 8px;border-radius:6px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.tabs button:focus-visible,.btn:focus-visible,.sol:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tgt{display:grid;grid-template-columns:minmax(0,1fr) 128px;gap:8px 10px;align-items:center}
+.tgt .name{display:flex;align-items:center;gap:8px;font-weight:500}
+.tgt input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent)}
+.tgt .from{display:block;font-family:var(--f-mono);font-size:.72rem;color:var(--muted);font-weight:400}
+.tgt .inp.off{opacity:.45}
+.poslist{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 10px;margin-top:6px}
+.poslist label{display:flex;gap:6px;align-items:center;font-size:.84rem}
+.poslist input{accent-color:var(--accent)}
+.btn{border:1px solid var(--line);background:var(--sunk);color:var(--ink);border-radius:6px;padding:6px 10px;font-family:var(--f-body);font-size:.82rem;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sols{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.sol{display:block;width:100%;text-align:left;border:1px solid var(--line);background:var(--sunk);color:var(--ink);border-radius:8px;padding:10px 12px;cursor:pointer;font-family:var(--f-body)}
+.sol[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);background:var(--surface)}
+.sol .head{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.sol .t{font-weight:600}
+.chip{font-size:.7rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:99px;white-space:nowrap}
+.chip.ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.chip.warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.chip.bad{color:var(--bad);background:color-mix(in srgb,var(--bad) 14%,transparent)}
+.sol ul{margin:6px 0 0;padding:0;list-style:none;font-family:var(--f-mono);font-size:.8rem;color:var(--muted)}
+.msg{border-radius:8px;padding:10px 12px;font-size:.85rem;margin-top:10px}
+.msg.bad{background:color-mix(in srgb,var(--bad) 12%,transparent);color:var(--bad)}
+.msg.warn{background:color-mix(in srgb,var(--warn) 14%,transparent);color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left;white-space:normal}
+th{font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td{font-family:var(--f-mono);font-size:.85rem}
+td:first-child{font-family:var(--f-body);font-weight:500}
+td .unit{color:var(--muted);font-size:.72rem}
+.d-pos{color:var(--ok)} .d-neg{color:var(--bad)}
+.tablewrap{overflow-x:auto}
+.plan{margin-top:6px}
+.plan td:first-child{white-space:normal}
+.drawwrap{display:flex;justify-content:center;overflow-x:auto}
+svg.racket{width:100%;max-width:470px;height:auto;display:block}
+svg text{font-family:var(--f-mono);fill:var(--ink)}
+.manual{display:grid;grid-template-columns:minmax(0,1fr) 110px;gap:6px 10px;align-items:center}
+.manual .pl{font-size:.85rem}
+.manual .pl small{display:block;color:var(--muted);font-size:.72rem}
+.formulas{font-size:.85rem;color:var(--ink)}
+.formulas code{font-family:var(--f-mono);font-size:.8rem;background:var(--sunk);border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+.formulas p{margin:6px 0;max-width:70ch}
+.bignum{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:10px}
+.bignum div{min-width:0}
+.bignum b{display:block;font-family:var(--f-display);font-size:1.7rem;line-height:1.05;font-weight:700}
+.bignum span{font-size:.7rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+@media (prefers-reduced-motion:no-preference){.sol{transition:border-color .15s,background .15s}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Racket <span>Tuner</span></h1>
+    <p class="sub">Bleiband berechnen: Ausgangswerte eingeben, Zielwerte setzen, und die App zeigt, wo am Racket wie viel Gewicht hinkommt.</p>
+  </header>
+
+  <div class="grid">
+    <!-- Eingaben -->
+    <div class="stack col-in">
+      <section class="panel" aria-labelledby="h-base">
+        <h2 id="h-base">Dein Racket heute</h2>
+        <div class="fields">
+          <div class="field"><label for="b-M">Gewicht</label><div class="inp"><input id="b-M" type="number" step="0.1" inputmode="decimal"><span class="u">g</span></div></div>
+          <div class="field"><label for="b-B">Balance</label><div class="inp"><input id="b-B" type="number" step="0.5" inputmode="decimal"><span class="u">mm</span></div></div>
+          <div class="field"><label for="b-SW">Schwunggewicht</label><div class="inp"><input id="b-SW" type="number" step="0.5" inputmode="decimal"><span class="u">kg·cm²</span></div></div>
+          <div class="field"><label for="b-TW">Twistweight</label><div class="inp"><input id="b-TW" type="number" step="0.1" inputmode="decimal" placeholder="optional"><span class="u">kg·cm²</span></div></div>
+        </div>
+        <p class="hint">Bespannt messen. Balance in mm ab Griffende, Schwunggewicht um die Achse 10 cm vom Griffende (Standard der Messgeräte, z.B. Babolat RDC).</p>
+        <details class="geo" id="geo">
+          <summary>Rahmen-Geometrie &amp; Bleiband</summary>
+          <div class="fields">
+            <div class="field" style="grid-column:1/-1"><label for="g-head">Kopfgrösse</label>
+              <select id="g-head" class="plain">
+                <option value="93">93 in² (Midsize)</option><option value="95">95 in²</option><option value="97">97 in²</option><option value="98">98 in²</option>
+                <option value="100" selected>100 in² (Standard)</option><option value="102">102 in²</option><option value="105">105 in²</option><option value="110">110 in²</option><option value="custom">Eigene Masse</option>
+              </select></div>
+            <div class="field"><label for="g-L">Länge</label><div class="inp"><input id="g-L" type="number" step="1"><span class="u">mm</span></div></div>
+            <div class="field"><label for="g-tip">Rahmen an Spitze</label><div class="inp"><input id="g-tip" type="number" step="1"><span class="u">mm</span></div></div>
+            <div class="field"><label for="g-iL">Saitenfläche Länge</label><div class="inp"><input id="g-iL" type="number" step="1"><span class="u">mm</span></div></div>
+            <div class="field"><label for="g-iW">Saitenfläche Breite</label><div class="inp"><input id="g-iW" type="number" step="1"><span class="u">mm</span></div></div>
+            <div class="field" style="grid-column:1/-1"><label for="g-tape">Bleiband</label>
+              <select id="g-tape" class="plain">
+                <option value="0.197">1/2" Bleiband (≈ 0,20 g/cm)</option>
+                <option value="0.098">1/4" Bleiband (≈ 0,10 g/cm)</option>
+                <option value="0.138">Wolfram-Band TW (≈ 0,14 g/cm)</option>
+                <option value="custom">Eigener Wert</option>
+              </select></div>
+            <div class="field" id="tapeCustomWrap" hidden><label for="g-tapeC">Gewicht pro cm</label><div class="inp"><input id="g-tapeC" type="number" step="0.01"><span class="u">g/cm</span></div></div>
+          </div>
+          <p class="hint">Die Saitenfläche bestimmt, wo die Uhrzeit-Positionen liegen. Am genauesten: am eigenen Racket nachmessen (innen, von Rahmen zu Rahmen).</p>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="h-mode">
+        <div class="tabs" role="tablist">
+          <button role="tab" id="tab-goal" aria-selected="true" aria-controls="pane-goal">Ziel erreichen</button>
+          <button role="tab" id="tab-man" aria-selected="false" aria-controls="pane-man">Selbst tunen</button>
+        </div>
+
+        <div id="pane-goal" role="tabpanel" aria-labelledby="tab-goal">
+          <h2 id="h-mode">Zielwerte</h2>
+          <div class="tgt" id="tgt"></div>
+          <div class="lbl" style="margin-top:14px">Erlaubte Positionen</div>
+          <div class="poslist" id="allowed"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="allAll" type="button">Alle</button>
+            <button class="btn" id="allHoop" type="button">Nur Kopf</button>
+            <div class="field" style="flex:1;min-width:150px"><div class="inp"><label class="u" for="maxPos" style="padding-left:8px">max. Stellen</label><select id="maxPos"><option>1</option><option>2</option><option selected>3</option><option>4</option></select></div></div>
+          </div>
+        </div>
+
+        <div id="pane-man" role="tabpanel" aria-labelledby="tab-man" hidden>
+          <h2>Gewichte setzen</h2>
+          <p class="hint" style="margin-top:0">Gesamtgewicht pro Position in Gramm. Bei Paaren (z.B. 3 &amp; 9 Uhr) wird es auf beide Seiten verteilt.</p>
+          <div class="manual" id="manual" style="margin-top:10px"></div>
+          <div class="row" style="margin-top:10px"><button class="btn" type="button" id="clearMan">Alles auf 0</button></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Zeichnung -->
+    <section class="panel col-draw" aria-labelledby="h-draw">
+      <h2 id="h-draw">Wo kommt das Blei hin?</h2>
+      <div class="drawwrap"><svg class="racket" id="svg" role="img" aria-label="Racket mit Bleiband-Positionen"></svg></div>
+    </section>
+
+    <!-- Ergebnis -->
+    <div class="stack col-out">
+      <section class="panel" id="solPanel" aria-labelledby="h-sol">
+        <h2 id="h-sol">Vorschläge</h2>
+        <div id="solMsg"></div>
+        <div class="sols" id="sols"></div>
+      </section>
+      <section class="panel" aria-labelledby="h-res">
+        <h2 id="h-res">Ergebnis</h2>
+        <div class="bignum" id="bignum"></div>
+        <div class="tablewrap"><table id="res"></table></div>
+        <div class="lbl" style="margin-top:14px">Bleiband-Plan</div>
+        <div class="tablewrap"><table class="plan" id="plan"></table></div>
+        <div class="row" style="margin-top:10px" id="toManualRow"><button class="btn" type="button" id="toManual">In „Selbst tunen“ übernehmen und anpassen</button></div>
+      </section>
+    </div>
+  </div>
+
+  <section class="panel formulas" style="margin-top:18px" aria-labelledby="h-f">
+    <h2 id="h-f">So rechnet die App</h2>
+    <p>Gewicht <i>m</i> (g) an der Stelle <i>x</i> (mm ab Griffende), mit seitlichem Abstand <i>r</i> zur Längsachse. Das Racket hat vorher Gewicht <i>M</i>, Balance <i>B</i>, Schwunggewicht <i>SW</i>, Twistweight <i>TW</i>.</p>
+    <p><b>Gewicht:</b> <code>M' = M + m</code></p>
+    <p><b>Balance</b> (Schwerpunkt): <code>B' = (M·B + m·x) / (M + m)</code></p>
+    <p><b>Schwunggewicht</b> (Steiner'scher Satz, Achse 10 cm): <code>SW' = SW + m·(x − 100 mm)²</code>, umgerechnet in kg·cm². Darum wirkt Blei an der Spitze so stark und Blei im Griff fast gar nicht.</p>
+    <p><b>Twistweight:</b> <code>TW' = TW + m·r²</code>. Nur Gewicht seitlich am Kopf (3 &amp; 9 Uhr) erhöht es deutlich.</p>
+    <p><b>Recoil Weight</b> (Trägheit um den Schwerpunkt): <code>RW = SW − M·(B − 10 cm)²</code>. Höher heisst stabiler bei harten Bällen.</p>
+    <p><b>Zielrechnung:</b> Alle Formeln sind linear im Zusatzgewicht. Die App prüft jede Kombination aus bis zu 4 erlaubten Positionen, löst das Gleichungssystem (nur positive Gewichte, Blei kann man nur hinzufügen) und sortiert nach Genauigkeit und Anzahl Stellen. Mit drei Zielwerten braucht es in der Regel zwei bis drei Stellen.</p>
+    <p class="hint">Quellen: Tennis Warehouse University, „The Physics of Adding Weight“ (Swingweight-Formel und 10-cm-Achse); Gamma Lead Tape 1/2" ≈ 0,5 g pro Zoll. Positionen sind Näherungen; die Werte nach dem Tunen am besten nachmessen.</p>
+  </section>
+</div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const fmt=(v,d=1)=>(v==null||!isFinite(v))?"–":v.toLocaleString("de-CH",{minimumFractionDigits:d,maximumFractionDigits:d});
+const sgn=(v,d=1)=>(v>0?"+":v<0?"−":"±")+fmt(Math.abs(v),d);
+
+/* ---------- Zustand ---------- */
+const DEF={base:{M:290,B:320,SW:300,TW:""},
+  geo:{head:"100",L:685,tip:15,iL:321,iW:256,tape:"0.197",tapeC:0.2},
+  tgt:{M:{on:true,v:300},B:{on:true,v:325},SW:{on:true,v:320},TW:{on:false,v:""}},
+  allowed:null, maxPos:3, manual:{}, tab:"goal", sel:0};
+let S=JSON.parse(JSON.stringify(DEF));
+try{const raw=localStorage.getItem("racketTuner.v1"); if(raw){const o=JSON.parse(raw); S=Object.assign(S,o); S.base=Object.assign({},DEF.base,o.base); S.geo=Object.assign({},DEF.geo,o.geo); S.tgt=Object.assign({},DEF.tgt,o.tgt);}}catch(e){}
+function save(){try{localStorage.setItem("racketTuner.v1",JSON.stringify(S))}catch(e){}}
+
+/* ---------- Geometrie ---------- */
+function headDims(sqin){const area=sqin*645.16, k=1.254; const b=Math.sqrt(area/(Math.PI*k)); return {iL:Math.round(2*k*b), iW:Math.round(2*b)};}
+function geom(){
+  const g=S.geo, L=+g.L||685, tip=+g.tip||15, a=(+g.iL||320)/2, b=(+g.iW||255)/2;
+  const xc=L-tip-a;
+  return {L,tip,a,b,xc};
+}
+function tapeGpcm(){return S.geo.tape==="custom"?(+S.geo.tapeC||0.2):+S.geo.tape;}
+function positions(){
+  const G=geom(); const P=[];
+  P.push({id:"butt",name:"Griffkappe",short:"Griffkappe",x:12,r:0,pair:false,kind:"axis",tip:"Macht kopfleichter, Schwunggewicht bleibt fast gleich."});
+  P.push({id:"grip",name:"Griff (unter dem Griffband)",short:"Griff",x:100,r:0,pair:false,kind:"axis",tip:"Liegt auf der Schwungachse: mehr Gewicht ohne mehr Schwunggewicht."});
+  const shaftX=Math.round(G.xc-G.a-75);
+  P.push({id:"shaft",name:"Herz / Schaft",short:"Herz",x:shaftX,r:0,pair:false,kind:"axis",tip:"Mehr Masse, Balance fast unverändert."});
+  const H=[[6,"6 Uhr (Brücke)",false],[5,"5 & 7 Uhr",true],[4,"4 & 8 Uhr",true],[3,"3 & 9 Uhr",true],[2,"2 & 10 Uhr",true],[1,"1 & 11 Uhr",true],[12,"12 Uhr (Spitze)",false]];
+  const tips={6:"Kaum Wirkung auf Schwunggewicht, Kopf leicht schwerer.",5:"Selten sinnvoll, erhöht SW ohne viel Stabilität.",4:"Etwas Stabilität, moderates SW.",3:"Mehr Twistweight: grösserer Sweetspot, stabiler bei Mishits.",2:"Stabilität + Power, Sweetspot rückt nach oben.",1:"Viel Power, Sweetspot nach oben.",12:"Maximales Schwunggewicht pro Gramm, mehr Power."};
+  H.forEach(([h,n,pair])=>{const th=(h%12)*Math.PI/6; P.push({id:"h"+h,name:n,short:n.replace(/ \(.*\)/,""),hour:h,x:Math.round(G.xc+G.a*Math.cos(th)),r:Math.round(Math.abs(G.b*Math.sin(th))),pair,kind:"hoop",tip:tips[h]});});
+  return P;
+}
+
+/* ---------- Physik ---------- */
+function specs(base,adds,P){
+  const M0=+base.M, B0=+base.B, SW0=+base.SW, TW0=base.TW===""||base.TW==null?null:+base.TW;
+  let m=0, mom=0, dSW=0, dTW=0;
+  P.forEach(p=>{const g=+adds[p.id]||0; if(!g)return; m+=g; mom+=g*p.x; dSW+=g*Math.pow(p.x-100,2)*1e-5; dTW+=g*p.r*p.r*1e-5;});
+  const M=M0+m, B=(M0*B0+mom)/M, SW=SW0+dSW, TW=TW0==null?null:TW0+dTW;
+  const RW0=SW0-(M0/1000)*Math.pow((B0-100)/10,2), RW=SW-(M/1000)*Math.pow((B-100)/10,2);
+  return {M,B,SW,TW,RW,RW0,dTW,added:m};
+}
+function hlPoints(B,L){return (L/2-B)/3.175;}
+
+/* ---------- Löser ---------- */
+function solveLS(A,b){ // A: n x k, Normalgleichungen
+  const n=A.length,k=A[0].length; const N=[],y=[];
+  for(let i=0;i<k;i++){N.push(new Array(k).fill(0));y.push(0);
+    for(let j=0;j<k;j++){let s=0;for(let r=0;r<n;r++)s+=A[r][i]*A[r][j];N[i][j]=s;}
+    let s=0;for(let r=0;r<n;r++)s+=A[r][i]*b[r];y[i]=s;}
+  let tr=0;for(let i=0;i<k;i++)tr+=N[i][i]; const lam=1e-10*tr+1e-14; for(let i=0;i<k;i++)N[i][i]+=lam;
+  for(let c=0;c<k;c++){let p=c;for(let r=c+1;r<k;r++)if(Math.abs(N[r][c])>Math.abs(N[p][c]))p=r;
+    if(Math.abs(N[p][c])<1e-14)return null; [N[c],N[p]]=[N[p],N[c]];[y[c],y[p]]=[y[p],y[c]];
+    for(let r=0;r<k;r++){if(r===c)continue;const f=N[r][c]/N[c][c];if(!f)continue;for(let j=c;j<k;j++)N[r][j]-=f*N[c][j];y[r]-=f*y[c];}}
+  return y.map((v,i)=>v/N[i][i]);
+}
+function combos(n,k){const out=[];const c=[];(function rec(s){if(c.length===k){out.push(c.slice());return;}for(let i=s;i<n;i++){c.push(i);rec(i+1);c.pop();}})(0);return out;}
+
+function solve(){
+  const P=positions().filter(p=>S.allowed.includes(p.id));
+  const b=S.base, T=S.tgt, M0=+b.M, B0=+b.B, SW0=+b.SW, TW0=b.TW===""?null:+b.TW;
+  const errs=[];
+  const eq=[];
+  if(T.M.on){const d=+T.M.v-M0; if(d<-0.05)errs.push("Das Zielgewicht liegt unter dem Ausgangsgewicht. Mit Bleiband kann man nur Gewicht hinzufügen."); eq.push({k:"M",c:p=>1,rhs:d,tol:0.5});}
+  const Mest=T.M.on?+T.M.v:M0+5;
+  if(T.B.on){const Bt=+T.B.v; eq.push({k:"B",c:p=>p.x-Bt,rhs:M0*(Bt-B0),tol:Mest*1});}
+  if(T.SW.on){const d=+T.SW.v-SW0; if(d<-0.05)errs.push("Das Ziel-Schwunggewicht liegt unter dem Ausgangswert. Zusätzliches Gewicht erhöht das Schwunggewicht immer."); eq.push({k:"SW",c:p=>Math.pow(p.x-100,2)*1e-5,rhs:d,tol:1});}
+  if(T.TW.on){ if(TW0==null){errs.push("Für ein Twistweight-Ziel brauche ich dein aktuelles Twistweight.");} else {const d=+T.TW.v-TW0; if(d<-0.02)errs.push("Das Ziel-Twistweight liegt unter dem Ausgangswert."); eq.push({k:"TW",c:p=>p.r*p.r*1e-5,rhs:d,tol:0.2});}}
+  if(!eq.length) return {errs:["Wähle mindestens einen Zielwert."],sols:[]};
+  if(errs.length) return {errs,sols:[]};
+  if(!P.length) return {errs:["Wähle mindestens eine erlaubte Position."],sols:[]};
+  if(eq.every(e=>Math.abs(e.rhs)<1e-9)) return {errs:[],sols:[{adds:{},exact:true,score:0,k:0}]};
+  const maxK=Math.min(S.maxPos,eq.length,P.length,4);
+  const res=[];
+  for(let k=1;k<=maxK;k++){
+    for(const cb of combos(P.length,k)){
+      const A=eq.map(e=>cb.map(i=>e.c(P[i])/e.tol)), rhs=eq.map(e=>e.rhs/e.tol);
+      const m=solveLS(A,rhs); if(!m)continue;
+      if(m.some(v=>!(v>0.15)))continue;            // nur positive, sinnvolle Mengen
+      let r2=0; eq.forEach((e,ri)=>{let s=0;cb.forEach((i,j)=>s+=A[ri][j]*m[j]);r2+=Math.pow(s-rhs[ri],2);});
+      const tot=m.reduce((a,v)=>a+v,0);
+      const small=m.filter(v=>v<0.6).length;
+      const score=r2+0.35*k+0.4*small+(T.M.on?0:0.01*tot);
+      const adds={}; cb.forEach((i,j)=>adds[P[i].id]=Math.round(m[j]*10)/10);
+      res.push({adds,score,r2,k,tot});
+    }
+  }
+  res.sort((a,b)=>a.score-b.score);
+  return {errs:[],sols:res.slice(0,5)};
+}
+
+/* ---------- Render: Eingaben ---------- */
+const TG=[["M","Gewicht","g",0.5],["B","Balance","mm",0.5],["SW","Schwunggewicht","kg·cm²",0.5],["TW","Twistweight","kg·cm²",0.1]];
+function buildTargets(){
+  $("tgt").innerHTML=TG.map(([k,n,u,st])=>`<div class="name"><input type="checkbox" id="t-${k}-on"><label for="t-${k}-on">${n}<span class="from" id="t-${k}-from"></span></label></div>
+    <div class="inp" id="t-${k}-box"><input id="t-${k}" type="number" step="${st}" inputmode="decimal" aria-label="Ziel ${n}"><span class="u">${u}</span></div>`).join("");
+  TG.forEach(([k])=>{$("t-"+k+"-on").checked=!!S.tgt[k].on; $("t-"+k).value=S.tgt[k].v;
+    $("t-"+k+"-on").addEventListener("change",e=>{S.tgt[k].on=e.target.checked;update();});
+    $("t-"+k).addEventListener("input",e=>{S.tgt[k].v=e.target.value;update();});});
+}
+function buildAllowed(){
+  const P=positions(); if(!S.allowed)S.allowed=P.map(p=>p.id);
+  $("allowed").innerHTML=P.map(p=>`<label><input type="checkbox" data-id="${p.id}" ${S.allowed.includes(p.id)?"checked":""}> ${p.short}</label>`).join("");
+  $("allowed").querySelectorAll("input").forEach(cb=>cb.addEventListener("change",()=>{S.allowed=[...$("allowed").querySelectorAll("input:checked")].map(c=>c.dataset.id);update();}));
+}
+function buildManual(){
+  const P=positions();
+  $("manual").innerHTML=P.map(p=>`<div class="pl"><label for="m-${p.id}">${p.name}</label><small>${p.x} mm ab Griffende${p.r?` · ${p.r} mm seitlich`:""}</small></div>
+    <div class="inp"><input id="m-${p.id}" type="number" min="0" step="0.5" inputmode="decimal" value="${S.manual[p.id]||""}" placeholder="0"><span class="u">g</span></div>`).join("");
+  P.forEach(p=>$("m-"+p.id).addEventListener("input",e=>{const v=parseFloat(e.target.value);S.manual[p.id]=isFinite(v)&&v>0?v:0;update(false);}));
+}
+function bindBase(){
+  [["b-M","M"],["b-B","B"],["b-SW","SW"],["b-TW","TW"]].forEach(([id,k])=>{$(id).value=S.base[k];$(id).addEventListener("input",e=>{S.base[k]=e.target.value;update();});});
+  const g=S.geo; $("g-head").value=g.head; $("g-L").value=g.L; $("g-tip").value=g.tip; $("g-iL").value=g.iL; $("g-iW").value=g.iW; $("g-tape").value=g.tape; $("g-tapeC").value=g.tapeC;
+  $("tapeCustomWrap").hidden=g.tape!=="custom";
+  $("g-head").addEventListener("change",e=>{g.head=e.target.value; if(g.head!=="custom"){const d=headDims(+g.head);g.iL=d.iL;g.iW=d.iW;$("g-iL").value=d.iL;$("g-iW").value=d.iW;} geoChanged();});
+  [["g-L","L"],["g-tip","tip"]].forEach(([id,k])=>$(id).addEventListener("input",e=>{g[k]=e.target.value;geoChanged();}));
+  [["g-iL","iL"],["g-iW","iW"]].forEach(([id,k])=>$(id).addEventListener("input",e=>{g[k]=e.target.value;g.head="custom";$("g-head").value="custom";geoChanged();}));
+  $("g-tape").addEventListener("change",e=>{g.tape=e.target.value;$("tapeCustomWrap").hidden=g.tape!=="custom";update(false);});
+  $("g-tapeC").addEventListener("input",e=>{g.tapeC=e.target.value;update(false);});
+}
+function geoChanged(){buildManual();update();}
+
+/* ---------- Render: Ausgabe ---------- */
+let lastSols=[];
+function currentAdds(){ if(S.tab==="man")return S.manual; const s=lastSols[S.sel]||lastSols[0]; return s?s.adds:{}; }
+
+function renderSolutions(r){
+  const P=positions(), byId=Object.fromEntries(P.map(p=>[p.id,p]));
+  $("solMsg").innerHTML=r.errs.map(e=>`<div class="msg bad">${e}</div>`).join("");
+  lastSols=r.sols; if(S.sel>=lastSols.length)S.sel=0;
+  $("sols").innerHTML=r.sols.map((s,i)=>{
+    const sp=specs(S.base,s.adds,P);
+    const dev=devs(sp); const worst=Math.max(0,...dev.map(d=>d.rel));
+    const chip=s.k===0?'<span class="chip ok">Schon erreicht</span>':worst<=1?'<span class="chip ok">Ziel erreicht</span>':worst<=3?'<span class="chip warn">Fast</span>':'<span class="chip bad">Näherung</span>';
+    const lines=Object.entries(s.adds).map(([id,g])=>{const p=byId[id];return `<li>${p.pair?`${fmt(g/2)} g je Seite`:`${fmt(g)} g`} · ${p.name}</li>`;}).join("");
+    return `<button type="button" class="sol" data-i="${i}" aria-pressed="${i===S.sel}"><div class="head"><span class="t">Variante ${i+1} · ${s.k} ${s.k===1?"Stelle":"Stellen"}, +${fmt(s.tot||0)} g</span>${chip}</div><ul>${lines}</ul>${worst>1&&s.k?`<ul>${dev.filter(d=>d.rel>1).map(d=>`<li style="color:var(--warn)">${d.n}: ${sgn(d.diff)} ${d.u} neben dem Ziel</li>`).join("")}</ul>`:""}</button>`;
+  }).join("");
+  if(!r.errs.length&&!r.sols.length)$("solMsg").innerHTML='<div class="msg warn">Mit den erlaubten Positionen gibt es keine Lösung. Erlaube mehr Positionen oder mehr Stellen.</div>';
+  $("sols").querySelectorAll(".sol").forEach(b=>b.addEventListener("click",()=>{S.sel=+b.dataset.i;update(false);}));
+}
+function devs(sp){
+  const T=S.tgt,out=[];
+  const m={M:["Gewicht","g",0.5],B:["Balance","mm",1],SW:["Schwunggewicht","kg·cm²",1],TW:["Twistweight","kg·cm²",0.2]};
+  ["M","B","SW","TW"].forEach(k=>{if(!T[k].on||T[k].v===""||sp[k]==null)return;const diff=sp[k]-(+T[k].v);out.push({k,n:m[k][0],u:m[k][1],diff,rel:Math.abs(diff)/m[k][2]});});
+  return out;
+}
+
+function renderResult(adds){
+  const P=positions(), G=geom(), sp=specs(S.base,adds,P), b=S.base, T=S.tgt;
+  const TW0=b.TW===""?null:+b.TW;
+  const hl0=hlPoints(+b.B,G.L), hl=hlPoints(sp.B,G.L);
+  const hlTxt=v=>Math.abs(v)<0.05?"ausgeglichen":v>0?`${fmt(v)} Pkt kopfleicht`:`${fmt(-v)} Pkt kopflastig`;
+  $("bignum").innerHTML=`<div><span>Gewicht</span><b>${fmt(sp.M)} g</b></div><div><span>Balance</span><b>${fmt(sp.B)} mm</b></div><div><span>Schwunggewicht</span><b>${fmt(sp.SW)}</b></div>`;
+  const row=(n,u,a,v,t,d=1)=>{const df=v-a;return `<tr><td>${n}</td><td>${fmt(a,d)}</td><td><b>${fmt(v,d)}</b></td><td class="${df>0.005?"d-pos":df<-0.005?"d-neg":""}">${isFinite(df)?sgn(df,d):"–"}</td><td>${t}</td></tr>`;};
+  const tg=k=>S.tab==="goal"&&T[k].on&&T[k].v!==""?fmt(+T[k].v,k==="TW"?1:1):"–";
+  $("res").innerHTML=`<thead><tr><th>Wert</th><th>Vorher</th><th>Nachher</th><th>Δ</th><th>Ziel</th></tr></thead><tbody>
+   ${row('Gewicht <span class="unit">g</span>',"g",+b.M,sp.M,tg("M"))}
+   ${row('Balance <span class="unit">mm</span>',"mm",+b.B,sp.B,tg("B"))}
+   ${row('Schwunggewicht <span class="unit">kg·cm²</span>',"",+b.SW,sp.SW,tg("SW"))}
+   ${TW0==null?`<tr><td>Twistweight <span class="unit">kg·cm²</span></td><td>–</td><td>–</td><td class="${sp.dTW>0.005?"d-pos":""}">${sgn(sp.dTW,2)}</td><td>${tg("TW")}</td></tr>`:row('Twistweight <span class="unit">kg·cm²</span>',"",TW0,sp.TW,tg("TW"),2)}
+   ${row('Recoil Weight <span class="unit">kg·cm²</span>',"",sp.RW0,sp.RW,"–")}
+   <tr><td>Balance in Punkten</td><td style="white-space:normal">${hlTxt(hl0)}</td><td style="white-space:normal"><b>${hlTxt(hl)}</b></td><td></td><td></td></tr>
+  </tbody>`;
+  // Bleiband-Plan
+  const gpcm=tapeGpcm();
+  const items=P.filter(p=>(+adds[p.id]||0)>0);
+  $("plan").innerHTML=items.length?`<thead><tr><th>Position</th><th>Gramm</th><th>Bleiband</th></tr></thead><tbody>${items.map(p=>{const g=+adds[p.id];const per=p.pair?g/2:g;
+    return `<tr><td>${p.name}<br><span class="unit" style="color:var(--muted);font-size:.72rem">${p.x} mm ab Griffende</span></td><td>${p.pair?`${fmt(per)} g ×2`:`${fmt(g)} g`}</td><td>${fmt(per/gpcm)} cm${p.pair?" je Seite":""}</td></tr>`;}).join("")}</tbody>`
+    :`<tbody><tr><td style="color:var(--muted)">Noch kein Gewicht gesetzt.</td></tr></tbody>`;
+  $("toManualRow").hidden=S.tab!=="goal"||!items.length;
+  drawRacket(adds,sp);
+}
+
+/* ---------- Zeichnung ---------- */
+function ellPt(G,ox,th){return {x:G.xc+(G.a+ox)*Math.cos(th),r:(G.b+ox)*Math.sin(th)};}
+function drawRacket(adds,sp){
+  const G=geom(), P=positions(), gpcm=tapeGpcm();
+  const W=470, cx=195, top=24, H=G.L+top+30;
+  const Y=x=>top+(G.L-x);
+  const ow=13, aO=G.a+G.tip, bO=G.b+ow;
+  let s=`<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  // Saiten
+  s+=`<defs><clipPath id="cl"><ellipse cx="${cx}" cy="${Y(G.xc)}" rx="${G.b}" ry="${G.a}"/></clipPath></defs><g clip-path="url(#cl)" stroke="var(--string)" stroke-width="1">`;
+  for(let i=-G.b;i<=G.b;i+=14)s+=`<line x1="${cx+i}" y1="${Y(G.xc+G.a)}" x2="${cx+i}" y2="${Y(G.xc-G.a)}"/>`;
+  for(let j=-G.a;j<=G.a;j+=16)s+=`<line x1="${cx-G.b}" y1="${Y(G.xc+j)}" x2="${cx+G.b}" y2="${Y(G.xc+j)}"/>`;
+  s+=`</g>`;
+  // Hals / Schaft
+  const thB=150*Math.PI/180, pB=ellPt(G,ow-2,thB); const joinX=G.xc-G.a-110;
+  s+=`<path d="M ${cx-12} ${Y(185)} L ${cx-12} ${Y(joinX)} L ${cx-pB.r} ${Y(pB.x)} M ${cx+12} ${Y(185)} L ${cx+12} ${Y(joinX)} L ${cx+pB.r} ${Y(pB.x)}" fill="none" stroke="var(--frame)" stroke-width="10" stroke-linejoin="round"/>`;
+  s+=`<rect x="${cx-12}" y="${Y(joinX)}" width="24" height="${joinX-185}" fill="var(--frame)"/>`;
+  // Rahmen (Ring)
+  s+=`<path fill-rule="evenodd" fill="var(--frame)" d="M ${cx-bO} ${Y(G.xc)} a ${bO} ${aO-0} 0 1 0 ${2*bO} 0 a ${bO} ${aO} 0 1 0 ${-2*bO} 0 Z M ${cx-G.b} ${Y(G.xc)} a ${G.b} ${G.a} 0 1 0 ${2*G.b} 0 a ${G.b} ${G.a} 0 1 0 ${-2*G.b} 0 Z"/>`;
+  // Griff
+  s+=`<rect x="${cx-16}" y="${Y(190)}" width="32" height="182" rx="3" fill="var(--grip)"/>`;
+  for(let x=20;x<190;x+=14)s+=`<line x1="${cx-16}" y1="${Y(x)}" x2="${cx+16}" y2="${Y(x+9)}" stroke="var(--surface)" stroke-opacity=".25" stroke-width="2"/>`;
+  s+=`<rect x="${cx-19}" y="${Y(8)}" width="38" height="10" rx="2" fill="var(--frame)"/>`;
+  // Schwungachse
+  s+=`<line x1="${cx-60}" y1="${Y(100)}" x2="${cx+60}" y2="${Y(100)}" stroke="var(--muted)" stroke-dasharray="4 4"/><text x="${cx-64}" y="${Y(100)+4}" font-size="11" text-anchor="end" fill="var(--muted)">Schwungachse 10 cm</text>`;
+  // Bleiband
+  const labels=[];
+  P.forEach(p=>{const g=+adds[p.id]||0; if(g<=0)return; const per=p.pair?g/2:g; const len=per/gpcm*10; // mm
+    if(p.kind==="hoop"){
+      const th0=(p.hour%12)*Math.PI/6; const sides=p.pair?[1,-1]:[1];
+      sides.forEach(sd=>{ // Bogenlänge entlang innerem Rahmen
+        const pts=[]; const step=0.004; const ox=-3;
+        const walk=dir=>{let th=th0,l=0,prev=ellPt(G,ox,th);const arr=[];while(l<len/2&&arr.length<2000){th+=dir*step;const q=ellPt(G,ox,th);l+=Math.hypot(q.x-prev.x,q.r-prev.r);arr.push(q);prev=q;}return arr;};
+        const back=walk(-1).reverse(), fwd=walk(1); const all=[...back,ellPt(G,ox,th0),...fwd];
+        const d=all.map((q,i)=>`${i?"L":"M"} ${(cx+sd*q.r).toFixed(1)} ${Y(q.x).toFixed(1)}`).join(" ");
+        s+=`<path d="${d}" fill="none" stroke="var(--tape)" stroke-width="7" stroke-linecap="butt"/>`;
+      });
+      labels.push({y:Y(p.x),x:cx+p.r+bO-G.b+6,txt:`${p.pair?fmt(per)+" g ×2":fmt(g)+" g"}  ${p.short}`});
+    } else {
+      const h=Math.max(4,Math.min(160,len)); s+=`<rect x="${cx-17}" y="${Y(p.x)-h/2}" width="34" height="${h}" fill="var(--tape)" opacity=".9"/>`;
+      labels.push({y:Y(p.x),x:cx+24,txt:`${fmt(g)} g  ${p.short}`});
+    }
+  });
+  // Labels ohne Überlappung
+  labels.sort((a,b)=>a.y-b.y); let last=-99;
+  labels.forEach(l=>{let y=Math.max(l.y,last+15); last=y; const lx=Math.max(l.x,cx+40);
+    s+=`<line x1="${l.x-4}" y1="${l.y}" x2="${lx+2}" y2="${y-4}" stroke="var(--tape)" stroke-width="1"/><text x="${lx+4}" y="${y}" font-size="12" font-weight="500">${l.txt}</text>`;});
+  // Balance
+  const b0=+S.base.B;
+  const tri=(x,fill,stroke)=>`<path d="M ${cx-78} ${Y(x)} l -12 -7 l 0 14 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>`;
+  s+=`<line x1="${cx-78}" y1="${Y(sp.B)}" x2="${cx+20}" y2="${Y(sp.B)}" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 3"/>`;
+  s+=tri(b0,"none","var(--muted)");
+  s+=tri(sp.B,"var(--accent)","var(--accent)");
+  const ly=Math.abs(Y(sp.B)-Y(b0))<14?(Y(sp.B)<Y(b0)?[Y(sp.B)-4,Y(b0)+12]:[Y(sp.B)+12,Y(b0)-4]):[Y(sp.B)+4,Y(b0)+4];
+  s+=`<text x="${cx-94}" y="${ly[0]}" font-size="12" text-anchor="end" fill="var(--accent)" font-weight="500">Balance ${fmt(sp.B,0)}</text>`;
+  if(Math.abs(sp.B-b0)>0.4)s+=`<text x="${cx-94}" y="${ly[1]}" font-size="11" text-anchor="end" fill="var(--muted)">vorher ${fmt(b0,0)}</text>`;
+  // Massstab
+  s+=`<text x="${W-6}" y="${Y(0)+4}" font-size="10" text-anchor="end" fill="var(--muted)">0 mm</text><text x="${W-6}" y="${Y(G.L)+4}" font-size="10" text-anchor="end" fill="var(--muted)">${G.L} mm</text>`;
+  s+=`</svg>`;
+  const svg=$("svg"); svg.setAttribute("viewBox",`0 0 ${W} ${H}`); svg.innerHTML=s.replace(/^<svg[^>]*>/,"").replace(/<\/svg>$/,"");
+}
+
+/* ---------- Tabs & Steuerung ---------- */
+function setTab(t){S.tab=t; $("tab-goal").setAttribute("aria-selected",t==="goal"); $("tab-man").setAttribute("aria-selected",t==="man");
+  $("pane-goal").hidden=t!=="goal"; $("pane-man").hidden=t!=="man"; $("solPanel").hidden=t!=="goal"; update(t==="goal");}
+$("tab-goal").addEventListener("click",()=>setTab("goal"));
+$("tab-man").addEventListener("click",()=>setTab("man"));
+$("allAll").addEventListener("click",()=>{S.allowed=positions().map(p=>p.id);buildAllowed();update();});
+$("allHoop").addEventListener("click",()=>{S.allowed=positions().filter(p=>p.kind==="hoop").map(p=>p.id);buildAllowed();update();});
+$("maxPos").addEventListener("change",e=>{S.maxPos=+e.target.value;update();});
+$("clearMan").addEventListener("click",()=>{S.manual={};buildManual();update(false);});
+$("toManual").addEventListener("click",()=>{S.manual=Object.assign({},currentAdds());buildManual();setTab("man");});
+
+function updateFrom(){const b=S.base; const f={M:b.M+" g",B:b.B+" mm",SW:b.SW,TW:b.TW===""?"–":b.TW};
+  TG.forEach(([k])=>{$("t-"+k+"-from").textContent="von "+f[k]; $("t-"+k+"-box").classList.toggle("off",!S.tgt[k].on);});}
+
+function update(resolve=true){
+  updateFrom();
+  if(S.tab==="goal"&&resolve!==false){renderSolutions(solve());}
+  else if(S.tab==="goal"){ // nur Auswahl geändert
+    $("sols").querySelectorAll(".sol").forEach(b=>b.setAttribute("aria-pressed",+b.dataset.i===S.sel));
+    if(!lastSols.length)renderSolutions(solve());
+  }
+  renderResult(currentAdds());
+  save();
+}
+
+// Init
+if(S.geo.head!=="custom"){const d=headDims(+S.geo.head);S.geo.iL=d.iL;S.geo.iW=d.iW;}
+$("maxPos").value=String(S.maxPos);
+bindBase(); buildTargets(); buildAllowed(); buildManual();
+setTab(S.tab==="man"?"man":"goal");
+renderSolutions(solve()); renderResult(currentAdds());
+window.__RT={solve,specs,positions,S};
+})();
+</script>
+</body>
+</html>
